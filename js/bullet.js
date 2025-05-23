@@ -637,38 +637,6 @@ class Bullet {
         }
     }
     
-    // ДЕТЕКЦИЯ МОБИЛЬНОГО УСТРОЙСТВА
-    detectMobileDevice() {
-        if (typeof window === 'undefined') return false;
-        
-        // Проверяем User Agent
-        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-        const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
-        
-        // Проверяем размер экрана
-        const screenWidth = window.innerWidth || document.documentElement.clientWidth;
-        const screenHeight = window.innerHeight || document.documentElement.clientHeight;
-        const isSmallScreen = screenWidth <= 768 || screenHeight <= 768;
-        
-        // Проверяем touch events
-        const hasTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-        
-        return mobileRegex.test(userAgent) || (isSmallScreen && hasTouchScreen);
-    }
-    
-    // МАСШТАБИРОВАНИЕ ДЛЯ МОБИЛЬНЫХ
-    getMobileScaleFactor() {
-        if (typeof window === 'undefined') return 1;
-        
-        const screenWidth = window.innerWidth || 800;
-        const baseWidth = 800; // Базовая ширина для ПК
-        
-        // Увеличиваем пули на маленьких экранах для лучшей видимости
-        if (screenWidth < 480) return 1.5;
-        if (screenWidth < 768) return 1.3;
-        return 1.2; // Небольшое увеличение для планшетов
-    }
-    
     // РЕНДЕР ПИСТОЛЕТА
     renderPistol(ctx, bulletColor, scale, effectsLevel) {
         const radius = this.radius * scale;
@@ -1175,6 +1143,487 @@ class Bullet {
         ctx.globalAlpha = 1;
     }
     
+    // МОБИЛЬНАЯ СИСТЕМА УПРАВЛЕНИЯ
+    static createMobileControls() {
+        if (!this.detectMobileDevice()) return;
+        
+        // Создаем контейнер для мобильных контролов
+        const controlsContainer = document.createElement('div');
+        controlsContainer.id = 'mobile-controls';
+        controlsContainer.style.cssText = `
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 200px;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            box-sizing: border-box;
+        `;
+        
+        // Левая часть - джойстик движения
+        const moveJoystick = this.createJoystick('move-joystick', 'Движение');
+        moveJoystick.style.left = '20px';
+        
+        // Центр - кнопки оружия
+        const weaponPanel = this.createWeaponPanel();
+        
+        // Правая часть - джойстик прицеливания и стрельбы
+        const aimJoystick = this.createJoystick('aim-joystick', 'Прицел');
+        aimJoystick.style.right = '20px';
+        
+        const fireButton = this.createFireButton();
+        
+        controlsContainer.appendChild(moveJoystick);
+        controlsContainer.appendChild(weaponPanel);
+        controlsContainer.appendChild(aimJoystick);
+        controlsContainer.appendChild(fireButton);
+        
+        document.body.appendChild(controlsContainer);
+        
+        // Инициализируем обработчики
+        this.initMobileHandlers();
+        
+        console.log('📱 Мобильное управление активировано!');
+    }
+    
+    static createJoystick(id, label) {
+        const joystick = document.createElement('div');
+        joystick.id = id;
+        joystick.style.cssText = `
+            width: 120px;
+            height: 120px;
+            border: 3px solid #fff;
+            border-radius: 50%;
+            position: relative;
+            background: rgba(255, 255, 255, 0.1);
+            touch-action: none;
+            user-select: none;
+        `;
+        
+        const stick = document.createElement('div');
+        stick.className = 'joystick-stick';
+        stick.style.cssText = `
+            width: 40px;
+            height: 40px;
+            background: #fff;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transition: all 0.1s ease;
+        `;
+        
+        const labelEl = document.createElement('div');
+        labelEl.textContent = label;
+        labelEl.style.cssText = `
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 12px;
+            text-align: center;
+        `;
+        
+        joystick.appendChild(stick);
+        joystick.appendChild(labelEl);
+        
+        return joystick;
+    }
+    
+    static createWeaponPanel() {
+        const panel = document.createElement('div');
+        panel.id = 'weapon-panel';
+        panel.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        `;
+        
+        // Кнопка смены оружия
+        const weaponButton = document.createElement('button');
+        weaponButton.id = 'weapon-switch';
+        weaponButton.textContent = '🔫 PISTOL';
+        weaponButton.style.cssText = `
+            padding: 10px 15px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid #fff;
+            border-radius: 10px;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            touch-action: manipulation;
+        `;
+        
+        // Индикатор патронов
+        const ammoDisplay = document.createElement('div');
+        ammoDisplay.id = 'ammo-display';
+        ammoDisplay.textContent = '12/12';
+        ammoDisplay.style.cssText = `
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            text-align: center;
+        `;
+        
+        // Кнопка перезарядки
+        const reloadButton = document.createElement('button');
+        reloadButton.id = 'reload-button';
+        reloadButton.textContent = '🔄';
+        reloadButton.style.cssText = `
+            padding: 8px 12px;
+            background: rgba(255, 165, 0, 0.3);
+            border: 2px solid #ffa500;
+            border-radius: 8px;
+            color: white;
+            font-size: 18px;
+            touch-action: manipulation;
+        `;
+        
+        panel.appendChild(weaponButton);
+        panel.appendChild(ammoDisplay);
+        panel.appendChild(reloadButton);
+        
+        return panel;
+    }
+    
+    static createFireButton() {
+        const fireButton = document.createElement('button');
+        fireButton.id = 'fire-button';
+        fireButton.textContent = '🔥';
+        fireButton.style.cssText = `
+            width: 80px;
+            height: 80px;
+            border: 3px solid #ff4444;
+            border-radius: 50%;
+            background: rgba(255, 68, 68, 0.3);
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            position: absolute;
+            bottom: 140px;
+            right: 30px;
+            touch-action: manipulation;
+            user-select: none;
+        `;
+        
+        return fireButton;
+    }
+    
+    static initMobileHandlers() {
+        // Джойстик движения
+        this.setupJoystickHandler('move-joystick', (deltaX, deltaY) => {
+            if (window.game && window.game.player) {
+                window.game.player.vx = deltaX * 5;
+                window.game.player.vy = deltaY * 5;
+            }
+        });
+        
+        // Джойстик прицеливания
+        this.setupJoystickHandler('aim-joystick', (deltaX, deltaY) => {
+            if (window.game && window.game.player) {
+                window.game.player.aimAngle = Math.atan2(deltaY, deltaX);
+            }
+        });
+        
+        // Кнопка стрельбы
+        const fireButton = document.getElementById('fire-button');
+        let isFiring = false;
+        
+        fireButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            isFiring = true;
+            this.startAutoFire();
+            fireButton.style.background = 'rgba(255, 68, 68, 0.8)';
+        });
+        
+        fireButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            isFiring = false;
+            this.stopAutoFire();
+            fireButton.style.background = 'rgba(255, 68, 68, 0.3)';
+        });
+        
+        // Смена оружия
+        const weaponButton = document.getElementById('weapon-switch');
+        weaponButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            this.switchWeapon();
+        });
+        
+        // Перезарядка
+        const reloadButton = document.getElementById('reload-button');
+        reloadButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            this.reloadWeapon();
+        });
+        
+        // Обновление интерфейса
+        setInterval(() => this.updateMobileUI(), 100);
+    }
+    
+    static setupJoystickHandler(joystickId, callback) {
+        const joystick = document.getElementById(joystickId);
+        const stick = joystick.querySelector('.joystick-stick');
+        let isDragging = false;
+        
+        const handleStart = (e) => {
+            e.preventDefault();
+            isDragging = true;
+            joystick.style.background = 'rgba(255, 255, 255, 0.3)';
+        };
+        
+        const handleMove = (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            
+            const rect = joystick.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            const touch = e.touches ? e.touches[0] : e;
+            const deltaX = touch.clientX - centerX;
+            const deltaY = touch.clientY - centerY;
+            
+            // Ограничиваем движение в пределах джойстика
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            const maxDistance = 40; // Радиус джойстика
+            
+            let finalX = deltaX;
+            let finalY = deltaY;
+            
+            if (distance > maxDistance) {
+                finalX = (deltaX / distance) * maxDistance;
+                finalY = (deltaY / distance) * maxDistance;
+            }
+            
+            // Обновляем позицию стика
+            stick.style.transform = `translate(${finalX - 20}px, ${finalY - 20}px)`;
+            
+            // Вызываем callback с нормализованными значениями
+            const normalizedX = finalX / maxDistance;
+            const normalizedY = finalY / maxDistance;
+            callback(normalizedX, normalizedY);
+        };
+        
+        const handleEnd = (e) => {
+            e.preventDefault();
+            isDragging = false;
+            stick.style.transform = 'translate(-20px, -20px)';
+            joystick.style.background = 'rgba(255, 255, 255, 0.1)';
+            callback(0, 0); // Остановка движения
+        };
+        
+        // Touch events
+        joystick.addEventListener('touchstart', handleStart);
+        document.addEventListener('touchmove', handleMove);
+        document.addEventListener('touchend', handleEnd);
+        
+        // Mouse events (для тестирования на ПК)
+        joystick.addEventListener('mousedown', handleStart);
+        document.addEventListener('mousemove', handleMove);
+        document.addEventListener('mouseup', handleEnd);
+    }
+    
+    static startAutoFire() {
+        if (this.autoFireInterval) return;
+        
+        this.autoFireInterval = setInterval(() => {
+            if (window.game && window.game.player) {
+                this.fireBullet();
+            }
+        }, 100); // Стрельба каждые 100ms
+    }
+    
+    static stopAutoFire() {
+        if (this.autoFireInterval) {
+            clearInterval(this.autoFireInterval);
+            this.autoFireInterval = null;
+        }
+    }
+    
+    static fireBullet() {
+        if (!window.game || !window.game.player) return;
+        
+        const player = window.game.player;
+        const weaponType = player.currentWeapon || 'pistol';
+        
+        // Проверяем патроны
+        if (player.ammo <= 0) {
+            this.showMessage('Нет патронов!');
+            return;
+        }
+        
+        const bullets = this.createWeaponBullet(
+            player.x, 
+            player.y, 
+            player.aimAngle || 0, 
+            weaponType, 
+            player
+        );
+        
+        if (bullets) {
+            bullets.forEach(bullet => {
+                if (window.game.bullets) {
+                    window.game.bullets.push(bullet);
+                }
+            });
+            
+            player.ammo--;
+            this.updateAmmoDisplay();
+        }
+    }
+    
+    static switchWeapon() {
+        if (!window.game || !window.game.player) return;
+        
+        const currentWeapon = window.game.player.currentWeapon || 'pistol';
+        const nextWeapon = this.getNextWeaponType(currentWeapon);
+        
+        window.game.player.currentWeapon = nextWeapon;
+        
+        // Перезаряжаем при смене оружия
+        const stats = this.getWeaponStats(nextWeapon);
+        window.game.player.ammo = stats.ammo;
+        window.game.player.maxAmmo = stats.ammo;
+        
+        this.updateWeaponDisplay();
+        this.showMessage(`Оружие: ${stats.name}`);
+    }
+    
+    static reloadWeapon() {
+        if (!window.game || !window.game.player) return;
+        
+        const player = window.game.player;
+        const weaponType = player.currentWeapon || 'pistol';
+        const stats = this.getWeaponStats(weaponType);
+        
+        if (player.ammo >= stats.ammo) {
+            this.showMessage('Уже заряжено!');
+            return;
+        }
+        
+        // Анимация перезарядки
+        const reloadButton = document.getElementById('reload-button');
+        reloadButton.textContent = '⏳';
+        reloadButton.disabled = true;
+        
+        setTimeout(() => {
+            player.ammo = stats.ammo;
+            this.updateAmmoDisplay();
+            reloadButton.textContent = '🔄';
+            reloadButton.disabled = false;
+            this.showMessage('Перезарядка завершена!');
+        }, stats.reloadTime || 1000);
+    }
+    
+    static updateMobileUI() {
+        this.updateWeaponDisplay();
+        this.updateAmmoDisplay();
+    }
+    
+    static updateWeaponDisplay() {
+        const weaponButton = document.getElementById('weapon-switch');
+        if (!weaponButton || !window.game || !window.game.player) return;
+        
+        const weaponType = window.game.player.currentWeapon || 'pistol';
+        const stats = this.getWeaponStats(weaponType);
+        const icon = this.getWeaponIcon(weaponType);
+        
+        weaponButton.textContent = `${icon} ${stats.name.toUpperCase()}`;
+    }
+    
+    static updateAmmoDisplay() {
+        const ammoDisplay = document.getElementById('ammo-display');
+        if (!ammoDisplay || !window.game || !window.game.player) return;
+        
+        const player = window.game.player;
+        const maxAmmo = player.maxAmmo || 12;
+        const currentAmmo = player.ammo || 0;
+        
+        ammoDisplay.textContent = `${currentAmmo}/${maxAmmo}`;
+        ammoDisplay.style.color = currentAmmo <= maxAmmo * 0.2 ? '#ff4444' : 'white';
+    }
+    
+    static getWeaponIcon(weaponType) {
+        const icons = {
+            pistol: '🔫',
+            rifle: '🔫',
+            shotgun: '💥',
+            sniper: '🎯',
+            plasma: '⚡',
+            laser: '🔴',
+            rocket: '🚀',
+            grenade: '💣',
+            melee: '⚔️'
+        };
+        return icons[weaponType] || '🔫';
+    }
+    
+    static showMessage(text) {
+        // Создаем временное сообщение
+        const message = document.createElement('div');
+        message.textContent = text;
+        message.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: bold;
+            z-index: 2000;
+            pointer-events: none;
+        `;
+        
+        document.body.appendChild(message);
+        
+        setTimeout(() => {
+            document.body.removeChild(message);
+        }, 2000);
+    }
+    
+    // ДЕТЕКЦИЯ МОБИЛЬНОГО УСТРОЙСТВА
+    detectMobileDevice() {
+        if (typeof window === 'undefined') return false;
+        
+        // Проверяем User Agent
+        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+        const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
+        
+        // Проверяем размер экрана
+        const screenWidth = window.innerWidth || document.documentElement.clientWidth;
+        const screenHeight = window.innerHeight || document.documentElement.clientHeight;
+        const isSmallScreen = screenWidth <= 768 || screenHeight <= 768;
+        
+        // Проверяем touch events
+        const hasTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        
+        return mobileRegex.test(userAgent) || (isSmallScreen && hasTouchScreen);
+    }
+    
+    // МАСШТАБИРОВАНИЕ ДЛЯ МОБИЛЬНЫХ
+    getMobileScaleFactor() {
+        if (typeof window === 'undefined') return 1;
+        
+        const screenWidth = window.innerWidth || 800;
+        const baseWidth = 800; // Базовая ширина для ПК
+        
+        // Увеличиваем пули на маленьких экранах для лучшей видимости
+        if (screenWidth < 480) return 1.5;
+        if (screenWidth < 768) return 1.3;
+        return 1.2; // Небольшое увеличение для планшетов
+    }
+    
     // ОЧИСТКА ПАМЯТИ
     destroy() {
         this.hitTargets = null;
@@ -1197,11 +1646,124 @@ class Bullet {
         };
     }
 
+    // СТАТИЧЕСКИЕ МЕТОДЫ ДЛЯ СОЗДАНИЯ ОРУЖИЯ
+    static createBullet(x, y, angle, speed, weaponType) {
+        const vx = Math.cos(angle) * speed;
+        const vy = Math.sin(angle) * speed;
+        return new Bullet(x, y, vx, vy, weaponType);
+    }
+    
+    static createShotgunBullets(x, y, angle, speed, weaponType = 'shotgun') {
+        const bullets = [];
+        const pelletCount = 8;
+        const spread = 0.4;
+        
+        for (let i = 0; i < pelletCount; i++) {
+            const pelletAngle = angle + (Math.random() - 0.5) * spread;
+            const pelletSpeed = speed + (Math.random() - 0.5) * 2;
+            bullets.push(this.createBullet(x, y, pelletAngle, pelletSpeed, weaponType));
+        }
+        
+        return bullets;
+    }
+    
+    static createWeaponBullet(x, y, angle, weaponType, player) {
+        const stats = this.getWeaponStats(weaponType);
+        const speed = stats.speed;
+        
+        // Проверка времени последнего выстрела
+        const now = Date.now();
+        if (player && player.lastShotTime && (now - player.lastShotTime) < stats.fireRate) {
+            return null;
+        }
+        
+        if (player) {
+            player.lastShotTime = now;
+        }
+        
+        // Для дробовика создаем несколько пуль
+        if (weaponType === 'shotgun') {
+            return this.createShotgunBullets(x, y, angle, speed, weaponType);
+        } else {
+            return [this.createBullet(x, y, angle, speed, weaponType)];
+        }
+    }
+    
+    // РАСШИРЕННЫЕ ХАРАКТЕРИСТИКИ ОРУЖИЯ
+    static getWeaponStats(weaponType) {
+        const stats = {
+            pistol: { 
+                damage: 25, fireRate: 300, accuracy: 0.95, reloadTime: 1000,
+                name: 'Пистолет', ammo: 12, speed: 8, rarity: 'common',
+                description: 'Надежное базовое оружие с возможностью рикошета'
+            },
+            rifle: { 
+                damage: 40, fireRate: 150, accuracy: 0.88, reloadTime: 2000,
+                name: 'Штурмовая винтовка', ammo: 30, speed: 12, rarity: 'common',
+                description: 'Автоматическое оружие с трассирующими пулями'
+            },
+            shotgun: { 
+                damage: 60, fireRate: 800, accuracy: 0.65, reloadTime: 2500,
+                name: 'Дробовик', ammo: 8, speed: 6, pellets: 8, rarity: 'uncommon',
+                description: 'Мощное оружие ближнего боя с разбросом'
+            },
+            sniper: { 
+                damage: 120, fireRate: 1500, accuracy: 0.99, reloadTime: 3000,
+                name: 'Снайперская винтовка', ammo: 5, speed: 15, rarity: 'rare',
+                description: 'Высокоточное оружие, пробивает стены'
+            },
+            plasma: { 
+                damage: 80, fireRate: 400, accuracy: 0.82, reloadTime: 2200,
+                name: 'Плазменная пушка', ammo: 20, speed: 10, rarity: 'epic',
+                description: 'Энергетическое оружие с цепной молнией'
+            },
+            laser: { 
+                damage: 15, fireRate: 50, accuracy: 1.0, reloadTime: 500,
+                name: 'Лазерная винтовка', ammo: 100, speed: 20, rarity: 'epic',
+                description: 'Быстрая стрельба, пробивает всё'
+            },
+            rocket: { 
+                damage: 150, fireRate: 2000, accuracy: 0.75, reloadTime: 4000,
+                name: 'Ракетомет', ammo: 3, speed: 7, rarity: 'legendary',
+                description: 'Взрывные ракеты большого радиуса'
+            },
+            grenade: {
+                damage: 200, fireRate: 3000, accuracy: 0.80, reloadTime: 2000,
+                name: 'Граната', ammo: 5, speed: 4, rarity: 'uncommon',
+                description: 'Взрывчатка с задержкой и отскоком'
+            },
+            melee: {
+                damage: 300, fireRate: 1000, accuracy: 1.0, reloadTime: 0,
+                name: 'Ближний бой', ammo: 999, speed: 2, rarity: 'common',
+                description: 'Мощные атаки в упор с казнью'
+            }
+        };
+        
+        return stats[weaponType] || stats.pistol;
+    }
+    
+    // УТИЛИТЫ
+    static getNextWeaponType(currentWeapon) {
+        const weapons = ['pistol', 'rifle', 'shotgun', 'sniper', 'plasma', 'laser', 'rocket', 'grenade', 'melee'];
+        const currentIndex = weapons.indexOf(currentWeapon);
+        const nextIndex = (currentIndex + 1) % weapons.length;
+        return weapons[nextIndex];
+    }
+}
+
 // Глобальная инициализация с улучшениями
 if (typeof window !== 'undefined') {
     console.log('🔫 УЛУЧШЕННАЯ СИСТЕМА ОРУЖИЯ АКТИВИРОВАНА!');
     console.log('⚡ Добавлены классы оружия и реалистичная физика');
     console.log('🎯 Доступные классы:', Object.keys(Bullet.getWeaponClasses()).join(', '));
+    
+    // Инициализируем мобильное управление
+    document.addEventListener('DOMContentLoaded', () => {
+        if (Bullet.detectMobileDevice()) {
+            Bullet.createMobileControls();
+            console.log('📱 Мобильное управление инициализировано!');
+        }
+    });
     
     // Добавляем очистку памяти
     window.bulletCleanup = function() {
