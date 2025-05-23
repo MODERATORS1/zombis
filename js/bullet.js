@@ -1049,226 +1049,153 @@ class Bullet {
         ctx.fill();
     }
 
-    // СТАТИЧЕСКИЕ МЕТОДЫ ДЛЯ СОЗДАНИЯ ОРУЖИЯ
-    static createBullet(x, y, angle, speed, weaponType) {
-        const vx = Math.cos(angle) * speed;
-        const vy = Math.sin(angle) * speed;
-        return new Bullet(x, y, vx, vy, weaponType);
-    }
-    
-    static createShotgunBullets(x, y, angle, speed, weaponType = 'shotgun') {
-        const bullets = [];
-        const pelletCount = 8;
-        const spread = 0.4;
+    // НЕДОСТАЮЩИЕ МЕТОДЫ ДЛЯ ИСПРАВЛЕНИЯ ОШИБОК
+    checkAnyObstacleCollision(obstacles) {
+        if (!obstacles || obstacles.length === 0) return false;
         
-        for (let i = 0; i < pelletCount; i++) {
-            const pelletAngle = angle + (Math.random() - 0.5) * spread;
-            const pelletSpeed = speed + (Math.random() - 0.5) * 2;
-            bullets.push(this.createBullet(x, y, pelletAngle, pelletSpeed, weaponType));
-        }
-        
-        return bullets;
-    }
-    
-    static createWeaponBullet(x, y, angle, weaponType, player) {
-        const stats = this.getWeaponStats(weaponType);
-        const speed = stats.speed;
-        
-        // Проверка времени последнего выстрела
-        const now = Date.now();
-        if (player && player.lastShotTime && (now - player.lastShotTime) < stats.fireRate) {
-            return null;
-        }
-        
-        if (player) {
-            player.lastShotTime = now;
-        }
-        
-        // Для дробовика создаем несколько пуль
-        if (weaponType === 'shotgun') {
-            return this.createShotgunBullets(x, y, angle, speed, weaponType);
-        } else {
-            return [this.createBullet(x, y, angle, speed, weaponType)];
-        }
-    }
-    
-    // РАСШИРЕННЫЕ ХАРАКТЕРИСТИКИ ОРУЖИЯ
-    static getWeaponStats(weaponType) {
-        const stats = {
-            pistol: { 
-                damage: 25, fireRate: 300, accuracy: 0.95, reloadTime: 1000,
-                name: 'Пистолет', ammo: 12, speed: 8, rarity: 'common',
-                description: 'Надежное базовое оружие с возможностью рикошета'
-            },
-            rifle: { 
-                damage: 40, fireRate: 150, accuracy: 0.88, reloadTime: 2000,
-                name: 'Штурмовая винтовка', ammo: 30, speed: 12, rarity: 'common',
-                description: 'Автоматическое оружие с трассирующими пулями'
-            },
-            shotgun: { 
-                damage: 60, fireRate: 800, accuracy: 0.65, reloadTime: 2500,
-                name: 'Дробовик', ammo: 8, speed: 6, pellets: 8, rarity: 'uncommon',
-                description: 'Мощное оружие ближнего боя с разбросом'
-            },
-            sniper: { 
-                damage: 120, fireRate: 1500, accuracy: 0.99, reloadTime: 3000,
-                name: 'Снайперская винтовка', ammo: 5, speed: 15, rarity: 'rare',
-                description: 'Высокоточное оружие, пробивает стены'
-            },
-            plasma: { 
-                damage: 80, fireRate: 400, accuracy: 0.82, reloadTime: 2200,
-                name: 'Плазменная пушка', ammo: 20, speed: 10, rarity: 'epic',
-                description: 'Энергетическое оружие с цепной молнией'
-            },
-            laser: { 
-                damage: 15, fireRate: 50, accuracy: 1.0, reloadTime: 500,
-                name: 'Лазерная винтовка', ammo: 100, speed: 20, rarity: 'epic',
-                description: 'Быстрая стрельба, пробивает всё'
-            },
-            rocket: { 
-                damage: 150, fireRate: 2000, accuracy: 0.75, reloadTime: 4000,
-                name: 'Ракетомет', ammo: 3, speed: 7, rarity: 'legendary',
-                description: 'Взрывные ракеты большого радиуса'
-            },
-            grenade: {
-                damage: 200, fireRate: 3000, accuracy: 0.80, reloadTime: 2000,
-                name: 'Граната', ammo: 5, speed: 4, rarity: 'uncommon',
-                description: 'Взрывчатка с задержкой и отскоком'
-            },
-            melee: {
-                damage: 300, fireRate: 1000, accuracy: 1.0, reloadTime: 0,
-                name: 'Ближний бой', ammo: 999, speed: 2, rarity: 'common',
-                description: 'Мощные атаки в упор с казнью'
+        for (let obstacle of obstacles) {
+            if (obstacle && this.checkObstacleCollision(obstacle)) {
+                return true;
             }
-        };
-        
-        return stats[weaponType] || stats.pistol;
+        }
+        return false;
     }
     
-    // СИСТЕМА ДРОПА ОРУЖИЯ
-    static createWeaponDrop(x, y, weaponType = null) {
-        if (!weaponType) {
-            const weapons = ['pistol', 'rifle', 'shotgun', 'sniper', 'plasma', 'laser', 'rocket', 'grenade', 'melee'];
-            const rarities = {
-                common: 0.4,
-                uncommon: 0.3,
-                rare: 0.2,
-                epic: 0.08,
-                legendary: 0.02
+    applyElementalEffects(enemy) {
+        if (!this.hasElementalDamage || !enemy) return;
+        
+        // Инициализируем статусные эффекты если их нет
+        if (!enemy.statusEffects) {
+            enemy.statusEffects = {};
+        }
+        
+        // Электрический урон для плазмы/энергетического оружия
+        if (this.weaponClass === 'energy' && this.elementalDamageValue > 0) {
+            enemy.statusEffects.shocked = {
+                damage: this.elementalDamageValue * 0.2,
+                duration: 3,
+                ticksRemaining: 180 // 3 секунды при 60 FPS
             };
             
-            // Выбираем оружие по редкости
-            const roll = Math.random();
-            let cumulative = 0;
-            
-            for (let weapon of weapons) {
-                const stats = this.getWeaponStats(weapon);
-                cumulative += rarities[stats.rarity] || 0.1;
-                if (roll <= cumulative) {
-                    weaponType = weapon;
-                    break;
-                }
-            }
-            
-            weaponType = weaponType || 'pistol';
+            // Визуальный эффект
+            enemy.isShocked = true;
+            setTimeout(() => { 
+                if (enemy) enemy.isShocked = false; 
+            }, 3000);
         }
         
+        // Поджигание для зажигательных снарядов
+        if (this.incendiary) {
+            enemy.statusEffects.burning = {
+                damage: this.elementalDamageValue * 0.15,
+                duration: 5,
+                ticksRemaining: 300 // 5 секунд при 60 FPS
+            };
+        }
+    }
+    
+    createChainLightning(enemy) {
+        if (!window.game || !window.game.enemies || !enemy) return;
+        
+        // Находим ближайших врагов для цепной молнии
+        const nearbyEnemies = window.game.enemies.filter(e => {
+            if (e === enemy || e.isDead || !e.health) return false;
+            
+            const distance = Math.sqrt(
+                Math.pow(this.x - e.x, 2) + 
+                Math.pow(this.y - e.y, 2)
+            );
+            
+            return distance < 100; // Радиус цепной молнии
+        });
+        
+        // Наносим урон по цепи (максимум 3 цели)
+        const chainDamage = Math.floor((this.elementalDamageValue || 20) * 0.7);
+        const maxTargets = Math.min(nearbyEnemies.length, 3);
+        
+        for (let i = 0; i < maxTargets; i++) {
+            const targetEnemy = nearbyEnemies[i];
+            if (targetEnemy && targetEnemy.health > 0) {
+                targetEnemy.health -= chainDamage;
+                
+                // Создаем визуальный эффект молнии
+                this.createLightningEffect(enemy.x, enemy.y, targetEnemy.x, targetEnemy.y);
+            }
+        }
+        
+        if (maxTargets > 0) {
+            console.log(`⚡ Цепная молния! Поражено ${maxTargets} врагов урон: ${chainDamage}`);
+        }
+    }
+    
+    createLightningEffect(x1, y1, x2, y2) {
+        // Создаем простой визуальный эффект молнии
+        if (window.game && window.game.addVisualEffect) {
+            window.game.addVisualEffect({
+                type: 'lightning',
+                x1: x1, y1: y1, x2: x2, y2: y2,
+                duration: 10, // кадров
+                color: '#FFFFFF'
+            });
+        }
+    }
+    
+    renderTracer(ctx, bulletColor) {
+        if (!ctx) return;
+        
+        const isMobile = this.detectMobileDevice();
+        const tracerLength = isMobile ? 4 : 8;
+        
+        ctx.strokeStyle = bulletColor;
+        ctx.lineWidth = isMobile ? 2 : 4;
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y);
+        ctx.lineTo(this.x - this.vx * tracerLength, this.y - this.vy * tracerLength);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+    }
+    
+    renderEnergyEffects(ctx, bulletColor) {
+        if (!ctx) return;
+        
+        const isMobile = this.detectMobileDevice();
+        
+        // Энергетическое свечение
+        ctx.shadowBlur = this.radius * (isMobile ? 3 : 6);
+        ctx.shadowColor = bulletColor;
+        
+        // Пульсирующий эффект
+        const pulse = Math.sin(this.life * 0.4) * 0.3 + 0.7;
+        ctx.globalAlpha = pulse;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = bulletColor;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+    
+    // ОЧИСТКА ПАМЯТИ
+    destroy() {
+        this.hitTargets = null;
+        this.hitTarget = null;
+        if (this.soundEffects) {
+            this.soundEffects = null;
+        }
+    }
+    
+    // СТАТИЧЕСКИЕ МЕТОДЫ ДЛЯ СОВМЕСТИМОСТИ
+    static getWeaponClasses() {
         return {
-            x: x,
-            y: y,
-            type: 'weapon_drop',
-            weaponType: weaponType,
-            radius: 15,
-            color: this.getWeaponDropColor(weaponType),
-            collected: false,
-            bobOffset: 0,
-            glowIntensity: 0,
-            lifetime: 900, // 15 секунд при 60 FPS
-            stats: this.getWeaponStats(weaponType)
+            pistol: { name: 'Пистолеты', types: ['pistol', 'revolver', 'dual_pistol'] },
+            automatic: { name: 'Автоматы', types: ['rifle', 'smg', 'lmg'] },
+            shotgun: { name: 'Дробовики', types: ['shotgun', 'combat_shotgun', 'auto_shotgun'] },
+            sniper: { name: 'Снайперки', types: ['sniper', 'anti_material', 'hunting_rifle'] },
+            energy: { name: 'Энергетическое', types: ['plasma', 'laser', 'ion_cannon'] },
+            explosive: { name: 'Взрывчатка', types: ['rocket', 'grenade_launcher', 'bazooka'] },
+            melee: { name: 'Ближний бой', types: ['melee', 'sword', 'chainsaw'] }
         };
     }
-    
-    static getWeaponDropColor(weaponType) {
-        const colors = {
-            pistol: '#FFFF00',
-            rifle: '#FF6600', 
-            shotgun: '#FF0000',
-            sniper: '#00FFFF',
-            plasma: '#00FF00',
-            laser: '#FF00FF',
-            rocket: '#FF4500',
-            grenade: '#8B4513',
-            melee: '#C0C0C0'
-        };
-        return colors[weaponType] || '#FFFFFF';
-    }
-    
-    // СИСТЕМА АПГРЕЙДОВ
-    static getAvailableUpgrades(weaponType) {
-        const baseUpgrades = [
-            { name: 'Увеличенный урон', type: 'damage_boost', value: 1.5, cost: 100, icon: '💥' },
-            { name: 'Критический шанс', type: 'critical_chance', value: 0.15, cost: 150, icon: '🎯' },
-            { name: 'Пробитие брони', type: 'armor_penetration', value: 30, cost: 200, icon: '🛡️' },
-            { name: 'Быстрая перезарядка', type: 'reload_speed', value: 0.7, cost: 120, icon: '⚡' }
-        ];
-        
-        const specialUpgrades = {
-            pistol: [
-                { name: 'Двойной выстрел', type: 'dual_shot', value: true, cost: 180, icon: '🔫' },
-                { name: 'Улучшенный рикошет', type: 'ricochet_boost', value: 0.3, cost: 200, icon: '🔄' }
-            ],
-            rifle: [
-                { name: 'Тройное пробивание', type: 'pierce_boost', value: 3, cost: 250, icon: '➡️' },
-                { name: 'Стабилизация', type: 'accuracy_boost', value: 0.95, cost: 180, icon: '🎪' }
-            ],
-            shotgun: [
-                { name: 'Зажигательная дробь', type: 'incendiary', value: 40, cost: 300, icon: '🔥' },
-                { name: 'Широкий разброс', type: 'spread_boost', value: 12, cost: 220, icon: '📡' }
-            ],
-            sniper: [
-                { name: 'Взрывные пули', type: 'explosive_rounds', value: 60, cost: 400, icon: '💣' },
-                { name: 'Термовидение', type: 'thermal_scope', value: true, cost: 350, icon: '👁️' }
-            ],
-            plasma: [
-                { name: 'Усиленная молния', type: 'chain_boost', value: 5, cost: 450, icon: '⚡' },
-                { name: 'Энергетический щит', type: 'energy_shield', value: true, cost: 500, icon: '🛡️' }
-            ],
-            laser: [
-                { name: 'Перегрузка', type: 'overcharge', value: 2.0, cost: 380, icon: '🔋' },
-                { name: 'Фокусировка луча', type: 'beam_focus', value: true, cost: 320, icon: '🔍' }
-            ],
-            rocket: [
-                { name: 'Кластерные боеголовки', type: 'cluster', value: 3, cost: 600, icon: '💥' },
-                { name: 'Самонаведение', type: 'homing', value: true, cost: 550, icon: '🎯' }
-            ],
-            grenade: [
-                { name: 'Шрапнель', type: 'shrapnel', value: 8, cost: 280, icon: '💥' },
-                { name: 'Липкие гранаты', type: 'sticky', value: true, cost: 320, icon: '🕷️' }
-            ],
-            melee: [
-                { name: 'Вампиризм', type: 'lifesteal', value: 0.3, cost: 400, icon: '🩸' },
-                { name: 'Берсерк', type: 'berserk', value: 1.5, cost: 350, icon: '😡' }
-            ]
-        };
-        
-        return [...baseUpgrades, ...(specialUpgrades[weaponType] || [])];
-    }
-    
-    // УТИЛИТЫ
-    static getNextWeaponType(currentWeapon) {
-        const weapons = ['pistol', 'rifle', 'shotgun', 'sniper', 'plasma', 'laser', 'rocket', 'grenade', 'melee'];
-        const currentIndex = weapons.indexOf(currentWeapon);
-        const nextIndex = (currentIndex + 1) % weapons.length;
-        return weapons[nextIndex];
-    }
-    
-    static getWeaponInfo(weaponType) {
-        const info = this.getWeaponStats(weaponType);
-        return `${info.name} | Урон: ${info.damage} | Скорость: ${info.fireRate}мс | Патроны: ${info.ammo} | ${info.description}`;
-    }
-    
-    // ...existing code для destroy и других методов...
-}
 
 // Глобальная инициализация с улучшениями
 if (typeof window !== 'undefined') {
